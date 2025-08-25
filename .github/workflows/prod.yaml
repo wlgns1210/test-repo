@@ -1,0 +1,90 @@
+name: Prod Pipeline
+
+on:
+  pull_request:
+    branches: [ "prod" ]
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  ff-merge-build-deploy:
+    runs-on: [self-hosted, linux, prod]
+    timeout-minutes: 5
+    steps:
+      - name: Require approval label
+        if: ${{ !contains(join(github.event.pull_request.labels.*.name, ','), 'approval') }}
+        run: |
+          echo "Missing 'approval' label" >&2
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward merge dev → prod
+        run: |
+          git fetch origin dev:refs/remotes/origin/dev
+          git fetch origin prod:refs/remotes/origin/prod
+          git checkout prod
+          git reset --hard origin/prod
+          git merge --ff-only origin/dev
+          git push origin prod
+
+      - name: Get latest commit SHA
+        id: sha
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME_PROD }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password \
+            | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Docker image (multi-arch)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/product/prod:${{ steps.sha.outputs.sha }}
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/product/prod:latest
+          cache-from: type=registry,ref=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/product/prod:cache
+          cache-to: type=registry,ref=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/product/prod:cache,mode=max
+
+      - name: Update prod.values.yaml with new image tag
+        run: |
+          sed -i -E "s/tag: \".*\"/tag: \"${{ steps.sha.outputs.sha }}\"/" values/prod.values.yaml
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add values/prod.values.yaml
+          git commit -m "chore(prod): update image tag ${{ steps.sha.outputs.sha }}" || echo "No changes"
+          git push origin prod
+
+      - name: ArgoCD Sync (prod)
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+          argocd --grpc-web login $ARGOCD_SERVER --insecure --auth-token $ARGOCD_AUTH_TOKEN
+          argocd app sync prod --prune
+          argocd app wait prod --health --timeout 60

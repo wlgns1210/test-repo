@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dev-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/wlgns1210/test-repo.git
+    targetRevision: dev
+    path: charts/app
+    helm:
+      valueFiles:
+        - values/dev.values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: product
+  syncPolicy: {}

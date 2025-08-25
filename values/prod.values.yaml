@@ -1,1 +1,7 @@
+image:
+repository: "932169417000.dkr.ecr.ap-northeast-2.amazonaws.com/product/prod"
+tag: "latest"
 
+
+rollout:
+namespace: product

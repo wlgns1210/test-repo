@@ -1,1 +1,14 @@
-
+apiVersion: v1
+kind: Service
+metadata:
+name: product-active
+namespace: {{ .Values.rollout.namespace }}
+labels:
+app.kubernetes.io/name: product
+spec:
+selector:
+app: product
+ports:
+- name: http
+port: {{ .Values.service.port }}
+targetPort: {{ .Values.service.targetPort }}
