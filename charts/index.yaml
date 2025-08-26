@@ -3,11 +3,11 @@ entries:
   app:
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2025-08-26T08:33:34.649466121Z"
-    digest: a8944c984bb65e1257c44f0ffc2878d75d5ba88c01441e0741cf502a1952a77b
+    created: "2025-08-26T08:40:19.374675747Z"
+    digest: 4a7b4d07bd4ae43444015e1fe359eea2350984576c62d6971b7da3433e9f5f70
     name: app
     type: application
     urls:
     - https://wlgns1210.github.io/test-repo/charts/app-0.1.0.tgz
     version: 0.1.0
-generated: "2025-08-26T08:33:34.649100386Z"
+generated: "2025-08-26T08:40:19.374311647Z"
