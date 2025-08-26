@@ -1,0 +1,13 @@
+apiVersion: v1
+entries:
+  app:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2025-08-26T06:48:18.923938956Z"
+    digest: 588b0d621e22369021ffcc111e3e5408e07b6f86c612ce9e1a910edc947d1e40
+    name: app
+    type: application
+    urls:
+    - https://wlgns1210.github.io/test-repo/charts/app-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-08-26T06:48:18.923544055Z"
