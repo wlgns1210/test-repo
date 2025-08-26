@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: dev-app
+  name: dev
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/wlgns1210/test-repo.
-    targetRevision: dev
-    path: charts/app
+    repoURL: https://wlgns1210.github.io/test-repo/charts
+    chart: app
+    targetRevision: 0.1.0
     helm:
       valueFiles:
-        - values/dev.values.yaml
+        - dev.values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: product
