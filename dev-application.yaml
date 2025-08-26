@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/wlgns1210/test-repo.git
+    repoURL: https://github.com/wlgns1210/test-repo.
     targetRevision: dev
     path: charts/app
     helm:
