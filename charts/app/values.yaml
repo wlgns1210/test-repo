@@ -1,21 +1,18 @@
 image:
-repository: ""
-tag: ""
-pullPolicy: IfNotPresent
-
+  repository: ""
+  tag: ""
+  pullPolicy: IfNotPresent
 
 replicaCount: 2
 
-
 service:
-port: 80
-targetPort: 8080
-
+  port: 80
+  targetPort: 8080
 
 rollout:
-name: product
-namespace: product
-strategy:
-autoPromotionEnabled: true
-autoPromotionSeconds: 0
-scaleDownDelaySeconds: 0
+  name: product
+  namespace: product
+  strategy:
+    autoPromotionEnabled: true
+    autoPromotionSeconds: 0
+    scaleDownDelaySeconds: 0
