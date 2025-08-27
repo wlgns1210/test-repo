@@ -1,4 +1,3 @@
-
 name: Dev Pipeline
 
 on:
@@ -13,7 +12,7 @@ permissions:
 
 jobs:
   merge-build-deploy:
-    runs-on: [self-hosted, linux, dev]
+    runs-on: [self-hosted, linux, dev]   # dev 전용 runner
     timeout-minutes: 5
     steps:
       - name: Checkout PR
@@ -63,8 +62,6 @@ jobs:
           tags: |
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/product/dev:${{ steps.sha.outputs.sha }}
             ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/product/dev:latest
-          cache-from: type=registry,ref=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/product/dev:cache
-          cache-to: type=registry,ref=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/product/dev:cache,mode=max
 
       - name: Update dev.values.yaml with new image tag
         run: |
