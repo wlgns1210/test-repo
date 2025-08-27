@@ -11,7 +11,7 @@ service:
 
 rollout:
   name: product
-  namespace: product
+  namespace: app
   strategy:
     autoPromotionEnabled: true
     autoPromotionSeconds: 0
