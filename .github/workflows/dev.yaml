@@ -17,7 +17,7 @@ permissions:
   actions: read
 
 env:
-  AWS_REGION: ap-northeast-2
+  AWS_REGION: eu-central-1
   ECR_REPOSITORY: product/dev
   DOCKERFILE_PATH: ./Dockerfile
   VALUES_FILE: values/dev.values.yaml
