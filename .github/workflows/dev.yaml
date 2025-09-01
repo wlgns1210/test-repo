@@ -8,7 +8,7 @@ on:
 jobs:
   dev-deploy:
     runs-on: [self-hosted, dev]  # dev-cluster runner 사용
-    if: startsWith(github.event.pull_request.head.ref, 'feature/')
+    if: startsWith(github.event.pull_request.head.ref, 'feature/*')
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
