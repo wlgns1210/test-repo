@@ -1,32 +1,46 @@
-name: Dev Deployment (Optimized)
+name: Prod Auto Deployment
 
 on:
   pull_request:
-    types: [closed]
+    types: [labeled]
     branches:
-      - dev
+      - prod
 
 permissions:
+  id-token: write
   contents: write
   pull-requests: write
+  actions: read
 
 env:
   AWS_REGION: eu-central-1
-  ECR_REPOSITORY: product/dev
+  ECR_REPOSITORY: product/prod
   DOCKERFILE_PATH: ./Dockerfile
-  VALUES_FILE: values/dev.values.yaml
 
 jobs:
-  deploy:
-    if: github.event.pull_request.merged == true
-    runs-on: [self-hosted, dev]
+  auto-merge-and-deploy:
+    runs-on: [self-hosted, prod]
     timeout-minutes: 5
+    if: contains(github.event.pull_request.labels.*.name, 'approval')
 
     steps:
-    - name: Checkout code
+    - name: Checkout dev branch
       uses: actions/checkout@v4
       with:
+        ref: dev
         fetch-depth: 0
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Merge dev into prod (Fast-Forward)
+      run: |
+        git fetch origin prod
+        git checkout prod
+        git merge --ff-only dev
+        git push origin prod
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -36,46 +50,42 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
-        role-session-name: GitHubActions-Dev
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+        role-session-name: GitHubActions-Prod
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Login to Amazon ECR
+      id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
-      id: ecr
 
-    - name: Build & Push Docker image
-      id: build
+    - name: Get commit SHA
+      id: commit
+      run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Build and push Docker image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ steps.commit.outputs.sha }}
       run: |
-        SHA=$(git rev-parse --short HEAD)
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
           --file $DOCKERFILE_PATH \
-          --tag ${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:$SHA \
-          --tag ${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:latest \
+          --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+          --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
           --push \
           --cache-from type=gha \
           --cache-to type=gha,mode=max \
           .
 
-        echo "IMAGE_TAG=$SHA" >> $GITHUB_ENV
-
-    - name: Update values.yaml
-      run: |
-        sed -i "s|image:.*|image: ${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:${{ env.IMAGE_TAG }}|g" $VALUES_FILE
-        git add $VALUES_FILE
-        git commit -m "chore: update dev image tag to ${{ env.IMAGE_TAG }} [skip ci]" || exit 0
-        git push origin dev
-
     - name: Trigger ArgoCD Sync
+      env:
+        ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+        ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_PROD }}
+        APP_NAME: ${{ secrets.ARGOCD_APP_NAME_PROD }}
       run: |
-        argocd app sync ${{ secrets.ARGOCD_APP_NAME_DEV }} \
-          --server ${{ secrets.ARGOCD_SERVER }} \
-          --auth-token ${{ secrets.ARGOCD_TOKEN_DEV }} \
-          --timeout 120
-
-    - name: Comment on PR
-      if: always()
-      run: |
-        STATUS=$([[ "${{ job.status }}" == "success" ]] && echo "✅" || echo "❌")
-        gh pr comment ${{ github.event.number }} --body "$STATUS Dev deployment completed! Image: ${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:${{ env.IMAGE_TAG }}"
+        curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        chmod +x /tmp/argocd
+        /tmp/argocd app sync $APP_NAME \
+          --server $ARGOCD_SERVER \
+          --auth-token $ARGOCD_TOKEN \
+          --timeout 60
