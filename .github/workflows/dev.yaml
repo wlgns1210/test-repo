@@ -2,7 +2,7 @@ name: Prod Auto Deployment
 
 on:
   pull_request:
-    types: [labeled]
+    types: [opened, labeled]
     branches:
       - prod
 
