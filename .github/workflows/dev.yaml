@@ -1,20 +1,14 @@
-name: Dev Deployment
+name: Dev Deployment (Optimized)
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [closed]
     branches:
       - dev
-    paths-ignore:
-      - 'values/**'
-      - '*.md'
-      - '.gitignore'
 
 permissions:
-  id-token: write
   contents: write
   pull-requests: write
-  actions: read
 
 env:
   AWS_REGION: eu-central-1
@@ -23,45 +17,22 @@ env:
   VALUES_FILE: values/dev.values.yaml
 
 jobs:
-  auto-merge-and-deploy:
+  deploy:
+    if: github.event.pull_request.merged == true
     runs-on: [self-hosted, dev]
     timeout-minutes: 5
-    if: startsWith(github.head_ref, 'feature/')
-    
+
     steps:
-    - name: Checkout repository
+    - name: Checkout code
       uses: actions/checkout@v4
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
-
-    - name: Configure Git
-      run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-    - name: Auto merge PR
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # PR을 자동으로 merge
-        gh pr merge ${{ github.event.number }} --merge --auto
-
-    - name: Wait for merge completion
-      run: |
-        # merge 완료까지 대기
-        sleep 10
-        
-    - name: Checkout dev branch
-      run: |
-        git checkout dev
-        git pull origin dev
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       with:
         platforms: linux/amd64,linux/arm64
-        
+
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -70,79 +41,41 @@ jobs:
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Login to Amazon ECR
-      id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
+      id: ecr
 
-    - name: Get commit SHA
-      id: commit
-      run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-
-    - name: Build and push Docker image
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ steps.commit.outputs.sha }}
+    - name: Build & Push Docker image
+      id: build
       run: |
-        # 멀티 아키텍처 빌드 및 푸시
+        SHA=$(git rev-parse --short HEAD)
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
-          --file ./Dockerfile \
-          --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-          --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+          --file $DOCKERFILE_PATH \
+          --tag ${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:$SHA \
+          --tag ${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:latest \
           --push \
           --cache-from type=gha \
           --cache-to type=gha,mode=max \
           .
 
-    - name: Update values file
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        IMAGE_TAG: ${{ steps.commit.outputs.sha }}
+        echo "IMAGE_TAG=$SHA" >> $GITHUB_ENV
+
+    - name: Update values.yaml
       run: |
-        # values.yaml 파일의 이미지 태그 업데이트
-        sed -i "s|image:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" $VALUES_FILE
-        
-        # 변경사항 커밋 및 푸시
+        sed -i "s|image:.*|image: ${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:${{ env.IMAGE_TAG }}|g" $VALUES_FILE
         git add $VALUES_FILE
-        git commit -m "chore: update dev image tag to $IMAGE_TAG [skip ci]" || exit 0
+        git commit -m "chore: update dev image tag to ${{ env.IMAGE_TAG }} [skip ci]" || exit 0
         git push origin dev
 
     - name: Trigger ArgoCD Sync
-      env:
-        ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-        ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_DEV }}
-        APP_NAME: ${{ secrets.ARGOCD_APP_NAME_DEV }}
       run: |
-        # ArgoCD CLI를 사용한 동기화
-        curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-        chmod +x /tmp/argocd
-        
-        # ArgoCD 앱 동기화
-        /tmp/argocd app sync $APP_NAME \
-          --server $ARGOCD_SERVER \
-          --auth-token $ARGOCD_TOKEN \
-          --timeout 300
-
-    - name: Wait for deployment
-      env:
-        ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
-        ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_DEV }}
-        APP_NAME: ${{ secrets.ARGOCD_APP_NAME_DEV }}
-      run: |
-        # 배포 완료까지 대기
-        /tmp/argocd app wait $APP_NAME \
-          --server $ARGOCD_SERVER \
-          --auth-token $ARGOCD_TOKEN \
-          --timeout 180
+        argocd app sync ${{ secrets.ARGOCD_APP_NAME_DEV }} \
+          --server ${{ secrets.ARGOCD_SERVER }} \
+          --auth-token ${{ secrets.ARGOCD_TOKEN_DEV }} \
+          --timeout 120
 
     - name: Comment on PR
       if: always()
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        if [ "${{ job.status }}" == "success" ]; then
-          gh pr comment ${{ github.event.number }} --body "✅ Dev deployment successful! 
-          Image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.commit.outputs.sha }}
-          Deployed to dev cluster via ArgoCD."
-        else
-          gh pr comment ${{ github.event.number }} --body "❌ Dev deployment failed. Please check the workflow logs."
-        fi
+        STATUS=$([[ "${{ job.status }}" == "success" ]] && echo "✅" || echo "❌")
+        gh pr comment ${{ github.event.number }} --body "$STATUS Dev deployment completed! Image: ${{ steps.ecr.outputs.registry }}/$ECR_REPOSITORY:${{ env.IMAGE_TAG }}"
