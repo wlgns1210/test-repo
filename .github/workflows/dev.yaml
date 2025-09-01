@@ -85,7 +85,7 @@ jobs:
         # 멀티 아키텍처 빌드 및 푸시
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
-          --file ./Dockerfile
+          --file ./Dockerfile \
           --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
           --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
           --push \
