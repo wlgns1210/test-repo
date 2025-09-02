@@ -3,7 +3,7 @@ name: Dev Auto Merge & Deploy
 on:
   pull_request:
     branches: [dev]
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
