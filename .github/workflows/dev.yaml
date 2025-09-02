@@ -5,51 +5,132 @@ on:
     branches: [dev]
     types: [opened, synchronize]
 
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+  actions: read
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REPOSITORY: product/dev
+  DOCKERFILE_PATH: ./Dockerfile
+  VALUES_FILE: values/dev.values.yaml
+  ARGOCD_TIMEOUT: 60
+
 jobs:
-  dev-deploy:
-    runs-on: [self-hosted, dev]  # dev-cluster runner 사용
+  auto-merge-and-deploy:
+    runs-on: [self-hosted, dev]
+    timeout-minutes: 5
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Auth GH CLI
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token 
-
-      - name: Setup AWS CLI
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/<GITHUB_ACTIONS_ROLE>
-          aws-region: ap-northeast-2
-
-      - name: Fast-forward merge PR into dev
+      - name: Verify feature branch
         run: |
-          gh pr merge ${{ github.event.pull_request.number }} \
-            --merge --admin --delete-branch
+          if [[ "${{ github.event.pull_request.head.ref }}" != feature/* ]]; then
+            echo "Not a feature branch PR. Skipping job."
+            exit 0
+          fi
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Auto merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --merge --auto --delete-branch
 
       - name: Checkout dev branch after merge
         uses: actions/checkout@v4
         with:
           ref: dev
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Log in to Amazon ECR
-        run: |
-          aws ecr get-login-password --region ap-northeast-2 \
-          | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/amd64,linux/arm64
 
-      - name: Build & Push Docker Image (product/dev)
-        run: |
-          IMAGE_URI=<ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/product/dev:latest
-          docker build -t $IMAGE_URI . --quiet
-          docker push $IMAGE_URI
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+          role-session-name: GitHubActions-Dev
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: ArgoCD Sync (product-dev)
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Get commit SHA
+        id: commit
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.commit.outputs.sha }}
         run: |
-          argocd app sync product-dev \
-            --grpc-web \
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --file $DOCKERFILE_PATH \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            --push \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            .
+
+      - name: Update values file
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.commit.outputs.sha }}
+        run: |
+          sed -i "s|image:.*|image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG|g" $VALUES_FILE
+          git add $VALUES_FILE
+          git commit -m "chore: update dev image tag to $IMAGE_TAG [skip ci]" || exit 0
+          git push origin dev
+
+      - name: Trigger ArgoCD Sync
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_DEV }}
+          APP_NAME: ${{ secrets.ARGOCD_APP_NAME_DEV }}
+        run: |
+          curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /tmp/argocd
+          /tmp/argocd app sync $APP_NAME \
             --server $ARGOCD_SERVER \
-            --auth-token $ARGOCD_AUTH_TOKEN \
-            --timeout 60
+            --auth-token $ARGOCD_TOKEN \
+            --timeout $ARGOCD_TIMEOUT
+
+      - name: Wait for deployment
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_DEV }}
+          APP_NAME: ${{ secrets.ARGOCD_APP_NAME_DEV }}
+        run: |
+          /tmp/argocd app wait $APP_NAME \
+            --server $ARGOCD_SERVER \
+            --auth-token $ARGOCD_TOKEN \
+            --timeout $ARGOCD_TIMEOUT
+
+      - name: Comment on PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            gh pr comment ${{ github.event.number }} --body "✅ Dev deployment successful! Image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.commit.outputs.sha }} Deployed to dev cluster via ArgoCD."
+          else
+            gh pr comment ${{ github.event.number }} --body "❌ Dev deployment failed. Please check the workflow logs."
+          fi
