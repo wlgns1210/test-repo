@@ -8,12 +8,16 @@ on:
 jobs:
   dev-deploy:
     runs-on: [self-hosted, dev]  # dev-cluster runner 사용
-    if: startsWith(github.event.pull_request.head.ref, 'feature/*')
+    if: startsWith(github.event.pull_request.head.ref, 'feature/')
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auth GH CLI
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | gh auth login --with-token 
 
       - name: Setup AWS CLI
         uses: aws-actions/configure-aws-credentials@v4
