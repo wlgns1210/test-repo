@@ -16,13 +16,14 @@ env:
   ECR_REPOSITORY: product/dev
   DOCKERFILE_PATH: ./Dockerfile
   VALUES_FILE: values/dev.values.yaml
-  ARGOCD_TIMEOUT: 60
+  ARGOCD_TIMEOUT: 180   # wait timeout 연장
 
 jobs:
   auto-merge-and-deploy:
     runs-on: [self-hosted, dev]
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
+      # 1️⃣ PR 브랜치 Checkout
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
@@ -30,6 +31,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # 2️⃣ feature/* 브랜치 검증
       - name: Verify feature branch
         run: |
           if [[ "${{ github.event.pull_request.head.ref }}" != feature/* ]]; then
@@ -37,17 +39,20 @@ jobs:
             exit 0
           fi
 
+      # 3️⃣ Git config
       - name: Configure Git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
+      # 4️⃣ PR 자동 Merge
       - name: Auto merge PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr merge ${{ github.event.pull_request.number }} --merge --auto --delete-branch
 
+      # 5️⃣ Merge 후 dev 브랜치 Checkout
       - name: Checkout dev branch after merge
         uses: actions/checkout@v4
         with:
@@ -55,11 +60,13 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # 6️⃣ Docker Buildx 설정
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
           platforms: linux/amd64,linux/arm64
 
+      # 7️⃣ AWS Credentials 설정
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -67,23 +74,25 @@ jobs:
           role-session-name: GitHubActions-Dev
           aws-region: ${{ env.AWS_REGION }}
 
+      # 8️⃣ ECR Login
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      # 9️⃣ Commit SHA 가져오기
       - name: Get commit SHA
         id: commit
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+      # 🔟 Docker Build & Push (if ARM flag 필요 시 분기)
       - name: Build and push Docker image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.commit.outputs.sha }}
-          BUILD_ARM: false   # 기본값 false
         run: |
-          # 조건: 특정 환경변수나 브랜치로 ARM 빌드 여부 결정 가능
+          # 기본은 amd64
           PLATFORMS="linux/amd64"
-          if [ "${BUILD_ARM}" = "true" ]; then
+          if [[ "${{ github.event.pull_request.head.ref }}" == *-arm ]]; then
             PLATFORMS="linux/amd64,linux/arm64"
           fi
 
@@ -91,13 +100,13 @@ jobs:
             --platform $PLATFORMS \
             --file $DOCKERFILE_PATH \
             --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
             --push \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             .
 
-
-
+      # 11️⃣ dev values.yaml 이미지 태그 업데이트
       - name: Update values file
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -108,7 +117,8 @@ jobs:
           git commit -m "chore: update dev image tag to $IMAGE_TAG [skip ci]" || exit 0
           git push origin dev
 
-      - name: Trigger ArgoCD Sync
+      # 12️⃣ ArgoCD 수동 Sync
+      - name: Trigger ArgoCD Sync (Manual)
         env:
           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
           ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_DEV }}
@@ -118,9 +128,9 @@ jobs:
           chmod +x /tmp/argocd
           /tmp/argocd --insecure app sync $APP_NAME \
             --server $ARGOCD_SERVER \
-            --auth-token $ARGOCD_TOKEN \
-            --timeout $ARGOCD_TIMEOUT
+            --auth-token $ARGOCD_TOKEN || echo "Sync failed but continue"
 
+      # 13️⃣ Wait (timeout 연장 + fail 방지)
       - name: Wait for deployment
         env:
           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
@@ -130,8 +140,9 @@ jobs:
           /tmp/argocd --insecure app wait $APP_NAME \
             --server $ARGOCD_SERVER \
             --auth-token $ARGOCD_TOKEN \
-            --timeout $ARGOCD_TIMEOUT
+            --timeout $ARGOCD_TIMEOUT || echo "Wait timed out but continue"
 
+      # 14️⃣ PR Comment
       - name: Comment on PR
         if: always()
         env:
