@@ -1,6 +1,6 @@
 replicaCount: 2
 
-image: 932169417000.dkr.ecr.eu-central-1.amazonaws.com/product/dev:3b3885c
+image: 932169417000.dkr.ecr.eu-central-1.amazonaws.com/product/dev:25e5cb0
   repository: 932169417000.dkr.ecr.eu-central-1.amazonaws.com/product/dev
   tag: latest
   pullPolicy: IfNotPresent
