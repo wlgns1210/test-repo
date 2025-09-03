@@ -76,13 +76,14 @@ jobs:
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
-        if: ${{ github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/arm-build' }}
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ steps.commit.outputs.sha }}
+          BUILD_ARM: false   # 기본값 false
         run: |
+          # 조건: 특정 환경변수나 브랜치로 ARM 빌드 여부 결정 가능
           PLATFORMS="linux/amd64"
-          if [ "${GITHUB_REF##*/}" = "arm-build" ]; then
+          if [ "${BUILD_ARM}" = "true" ]; then
             PLATFORMS="linux/amd64,linux/arm64"
           fi
 
@@ -94,6 +95,7 @@ jobs:
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
             .
+
 
 
       - name: Update values file
