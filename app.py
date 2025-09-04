@@ -8,8 +8,6 @@ app = FastAPI()
 def get_api():
     return "product marking!"
 
-
-
 @app.get("/health", response_class=PlainTextResponse)
 def health_check():
     return "ok"
@@ -17,6 +15,7 @@ def health_check():
 if __name__ == "__main__":
 
     uvicorn.run(app, host="0.0.0.0", port=8080, reload=True)
+
 
 
 
