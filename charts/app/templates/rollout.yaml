@@ -21,12 +21,12 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.service.targetPort }}
-            initialDelaySeconds: 2
-            periodSeconds: 3
+        #  readinessProbe:
+        #    httpGet:
+        #      path: /health
+        #      port: {{ .Values.service.targetPort }}
+        #    initialDelaySeconds: 2
+        #    periodSeconds: 3
   strategy:
     blueGreen:
       activeService: product-active
