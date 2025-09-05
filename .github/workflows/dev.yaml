@@ -120,7 +120,7 @@ jobs:
       # 12️⃣ ArgoCD 수동 Sync
       - name: Trigger ArgoCD Sync
         run: |
-          /tmp/argocd app sync $APP_NAME \
+          argocd app sync $APP_NAME \
             --server $ARGOCD_SERVER \
             --auth-token $ARGOCD_TOKEN \
             --insecure \
@@ -132,7 +132,7 @@ jobs:
 
       - name: Wait for deployment
         run: |
-          /tmp/argocd app wait $APP_NAME \
+          argocd app wait $APP_NAME \
             --server $ARGOCD_SERVER \
             --auth-token $ARGOCD_TOKEN \
             --insecure \
