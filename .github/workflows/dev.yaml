@@ -117,6 +117,10 @@ jobs:
           git commit -m "chore: update dev image tag to $IMAGE_TAG [skip ci]" || exit 0
           git push origin dev
 
+      - name: Test DNS resolution
+        run: |
+          nslookup ${{ secrets.ARGOCD_SERVER }}
+          ping -c 2 ${{ secrets.ARGOCD_SERVER }}
 
       # 12️⃣ ArgoCD 수동 Sync
       - name: Trigger ArgoCD Sync (Manual)
