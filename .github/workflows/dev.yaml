@@ -121,7 +121,7 @@ jobs:
       # 12️⃣ ArgoCD 수동 Sync
       - name: Trigger ArgoCD Sync (Manual)
         env:
-          ARGOCD_SERVER: "http://${{ secrets.ARGOCD_SERVER }}"
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
           ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_DEV }}
           APP_NAME: ${{ secrets.ARGOCD_APP_NAME_DEV }}
         run: |
@@ -135,7 +135,7 @@ jobs:
       # 13️⃣ Wait (timeout 연장 + fail 방지)
       - name: Wait for deployment
         env:
-          ARGOCD_SERVER: "http://${{ secrets.ARGOCD_SERVER }}"
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
           ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_DEV }}
           APP_NAME: ${{ secrets.ARGOCD_APP_NAME_DEV }}
         run: |
