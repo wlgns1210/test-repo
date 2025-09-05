@@ -1,0 +1,18 @@
+replicaCount: 2
+
+image: 932169417000.dkr.ecr.eu-central-1.amazonaws.com/product/dev:eaf7a60
+  repository: 932169417000.dkr.ecr.eu-central-1.amazonaws.com/product/dev
+  tag: 29185ac
+  pullPolicy: Always
+
+service:
+  port: 80
+  targetPort: 8080
+
+rollout:
+  name: product
+  namespace: app
+  strategy:
+    autoPromotionEnabled: true
+    autoPromotionSeconds: 0
+    scaleDownDelaySeconds: 0
