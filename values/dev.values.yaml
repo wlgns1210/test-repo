@@ -2,7 +2,7 @@ replicaCount: 2
 
 image: 932169417000.dkr.ecr.eu-central-1.amazonaws.com/product/dev:eaf7a60
   repository: 932169417000.dkr.ecr.eu-central-1.amazonaws.com/product/dev
-  tag: 1e15e9b
+  tag: 7ec764c
   pullPolicy: Always
 
 service:
