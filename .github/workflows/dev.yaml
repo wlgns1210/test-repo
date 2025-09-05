@@ -117,12 +117,6 @@ jobs:
           git commit -m "chore: update dev image tag to $IMAGE_TAG [skip ci]" || exit 0
           git push origin dev
 
-      - name: Test ArgoCD server connectivity
-        run: |
-          echo "Testing ArgoCD server..."
-          curl -v https://${{ secrets.ARGOCD_SERVER }} || echo "Failed to connect"
-
-
       # 12️⃣ ArgoCD 수동 Sync
       - name: Trigger ArgoCD Sync (Manual)
         env:
@@ -133,7 +127,7 @@ jobs:
           curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           chmod +x /tmp/argocd
           /tmp/argocd app sync $APP_NAME \
-            --server $ARGOCD_SERVER:80 \
+            --server $ARGOCD_SERVER \
             --auth-token $ARGOCD_TOKEN \
             --insecure \
             --force
