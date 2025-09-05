@@ -6,7 +6,7 @@ app = FastAPI()
 
 @app.get("/api", response_class=PlainTextResponse)
 def get_api():
-    return "product marking!"
+    return "product marking!
 
 @app.get("/health", response_class=PlainTextResponse)
 def health_check():
@@ -31,3 +31,4 @@ if __name__ == "__main__":
 # updated at 1756867502
 # updated at 1756867586
 # updated at 1756869289
+# updated at 1757041964
