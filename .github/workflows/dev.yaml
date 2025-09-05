@@ -123,8 +123,9 @@ jobs:
         env:
           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
           ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_DEV }}
-          APP_NAME: ${{ secrets.ARGOCD_APP_NAME_DEV }}
+          APP_NAME: ${{ secrets.ARGOCD_APP_NAME_DEV }
         run: |
+          echo "$ARGOCD_SERVER"
           curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           chmod +x /tmp/argocd
           /tmp/argocd --insecure app sync $APP_NAME \
