@@ -129,7 +129,8 @@ jobs:
           /tmp/argocd app sync $APP_NAME \
             --server $ARGOCD_SERVER \
             --auth-token $ARGOCD_TOKEN \
-            --insecure 
+            --insecure \
+            --force
             
       # 13️⃣ Wait (timeout 연장 + fail 방지)
       - name: Wait for deployment
