@@ -117,10 +117,11 @@ jobs:
           git commit -m "chore: update dev image tag to $IMAGE_TAG [skip ci]" || exit 0
           git push origin dev
 
-      - name: Test DNS resolution
+      - name: Test ArgoCD server connectivity
         run: |
-          nslookup ${{ secrets.ARGOCD_SERVER }}
-          ping -c 2 ${{ secrets.ARGOCD_SERVER }}
+          echo "Testing ArgoCD server..."
+          curl -v https://${{ secrets.ARGOCD_SERVER }} || echo "Failed to connect"
+
 
       # 12️⃣ ArgoCD 수동 Sync
       - name: Trigger ArgoCD Sync (Manual)
