@@ -130,6 +130,7 @@ jobs:
           /tmp/argocd app sync $APP_NAME \
             --server $ARGOCD_SERVER \
             --auth-token $ARGOCD_TOKEN \
+            --insecure \
             --force
 
       # 13️⃣ Wait (timeout 연장 + fail 방지)
@@ -142,6 +143,7 @@ jobs:
           /tmp/argocd app wait $APP_NAME \
             --server $ARGOCD_SERVER \
             --auth-token $ARGOCD_TOKEN \
+            --insecure \
             --timeout $ARGOCD_TIMEOUT || echo "Wait timed out but continue"
 
       # 14️⃣ PR Comment
