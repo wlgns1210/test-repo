@@ -128,7 +128,7 @@ jobs:
           echo "ARGOCD_SERVER='$ARGOCD_SERVER'"
           curl -sSL -o /tmp/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           chmod +x /tmp/argocd
-          /tmp/argocd --insecure app sync $APP_NAME \
+          /tmp/argocd app sync $APP_NAME \
             --server $ARGOCD_SERVER \
             --auth-token $ARGOCD_TOKEN \
             --force
@@ -140,7 +140,7 @@ jobs:
           ARGOCD_TOKEN: ${{ secrets.ARGOCD_TOKEN_DEV }}
           APP_NAME: ${{ secrets.ARGOCD_APP_NAME_DEV }}
         run: |
-          /tmp/argocd --insecure app wait $APP_NAME \
+          /tmp/argocd app wait $APP_NAME \
             --server $ARGOCD_SERVER \
             --auth-token $ARGOCD_TOKEN \
             --timeout $ARGOCD_TIMEOUT || echo "Wait timed out but continue"
